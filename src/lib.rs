@@ -10,7 +10,8 @@ mod response;
 pub use response::{ClientError, PairResponse, Result};
 
 /// The [Dexscreener API URL](https://docs.dexscreener.com/api/reference).
-pub const BASE_URL: &str = "https://api.dexscreener.com/latest/";
+// pub const BASE_URL: &str = "https://api.dexscreener.com/latest/";
+pub const BASE_URL: &str = "https://api.dexscreener.com/";
 
 /// A [Dexscreener API](https://docs.dexscreener.com/api/reference) HTTP client.
 #[derive(Clone, Debug)]
@@ -53,6 +54,7 @@ impl Client {
 
 /// Routes
 impl Client {
+    // MI: Get the pools of a given token address
     /// Performs an HTTP `GET` request to the `/dex/pairs/{chain_id}/{pair_addresses}` path.
     pub async fn pairs(
         &self,
@@ -60,24 +62,30 @@ impl Client {
         pair_addresses: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<PairResponse> {
         let addresses = format_addresses(pair_addresses)?;
-        let path = format!("dex/pairs/{chain_id}/{addresses}");
+        // let path = format!("dex/pairs/{chain_id}/{addresses}");
+        let path = format!("token-pairs/v1/{chain_id}/{addresses}");
+
         self.get_pair(&path).await
     }
 
     /// Performs an HTTP `GET` request to the `/dex/tokens/{token_addresses}` path.
     pub async fn tokens(
         &self,
+        chain_id: impl Display,
         token_addresses: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<PairResponse> {
         let addresses = format_addresses(token_addresses)?;
-        let path = format!("dex/tokens/{addresses}");
+        // let path = format!("dex/tokens/{addresses}");
+        let path = format!("tokens/v1/{chain_id}/{addresses}");
+
         self.get_pair(&path).await
     }
 
+    // MI: latest/dex/search?q=text
     /// Performs an HTTP `GET` request to the `/dex/search` path.
     pub async fn search(&self, query: impl AsRef<str>) -> Result<PairResponse> {
         Ok(self
-            ._get("dex/search")?
+            ._get("latest/dex/search")?
             .query(&[("q", query.as_ref())])
             .send()
             .await?
@@ -166,7 +174,7 @@ mod tests {
             "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
             "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
         ];
-        let result = client.tokens(token_addresses).await.unwrap().pairs.unwrap();
+        let result = client.tokens("bsc", token_addresses).await.unwrap().pairs.unwrap();
         assert!(result.len() > 20);
     }
 
