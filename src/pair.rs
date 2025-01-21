@@ -51,10 +51,10 @@ pub struct Liquidity {
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Timed<T> {
-    pub m5: T,
-    pub h1: T,
-    pub h6: T,
-    pub h24: T,
+    pub m5: Option<T>,
+    pub h1: Option<T>,
+    pub h6: Option<T>,
+    pub h24: Option<T>,
 }
 
 // interface Pair {

@@ -42,7 +42,13 @@ impl Client {
         Ok(Self { client, url: url.into_url()? })
     }
 
+    // MI: legacy: latest api => latest/dex/ => Result<PairResponse> is a map
     async fn get_pair(&self, path: &str) -> Result<PairResponse> {
+        Ok(self._get(path)?.send().await?.error_for_status()?.json().await?)
+    }
+
+    // MI: v1 api => Result<Option<Vec<Pair>>> is an vector(sequence)
+    async fn get_v1_pair(&self, path: &str) -> Result<Option<Vec<Pair>>> {
         Ok(self._get(path)?.send().await?.error_for_status()?.json().await?)
     }
 
@@ -54,7 +60,9 @@ impl Client {
 
 /// Routes
 impl Client {
-    // MI: Get the pools of a given token address
+    // MI: pair_addresses may be one or multiple addresses
+    // if one pair_address: reuslt includes a pairs[] vec and a pair{} obj
+    // if multiple pair addresses: result includes a pairs[] and null pair
     /// Performs an HTTP `GET` request to the `/dex/pairs/{chain_id}/{pair_addresses}` path.
     pub async fn pairs(
         &self,
@@ -62,23 +70,39 @@ impl Client {
         pair_addresses: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<PairResponse> {
         let addresses = format_addresses(pair_addresses)?;
-        // let path = format!("dex/pairs/{chain_id}/{addresses}");
-        let path = format!("token-pairs/v1/{chain_id}/{addresses}");
-
+        let path = format!("latest/dex/pairs/{chain_id}/{addresses}");
         self.get_pair(&path).await
+    }
+
+    // MI: Get the pools of a given token address
+    /// Performs an HTTP `GET` request to the `token-pairs/v1/{chain_id}/{address}` path.
+    pub async fn pools(&self, chain_id: impl Display, address: &str) -> Result<Option<Vec<Pair>>> {
+        let path = format!("token-pairs/v1/{chain_id}/{address}");
+
+        self.get_v1_pair(&path).await
     }
 
     /// Performs an HTTP `GET` request to the `/dex/tokens/{token_addresses}` path.
     pub async fn tokens(
         &self,
-        chain_id: impl Display,
         token_addresses: impl IntoIterator<Item = impl AsRef<str>>,
     ) -> Result<PairResponse> {
         let addresses = format_addresses(token_addresses)?;
-        // let path = format!("dex/tokens/{addresses}");
+        let path = format!("latest/dex/tokens/{addresses}");
+        self.get_pair(&path).await
+    }
+
+    // MI: v1_tokens is an alternative of legacy tokens
+    /// Performs an HTTP `GET` request to the `/tokens/v1/{chain_id}/{token_addresses}` path.
+    pub async fn v1_tokens(
+        &self,
+        chain_id: impl Display,
+        token_addresses: impl IntoIterator<Item = impl AsRef<str>>,
+    ) -> Result<Option<Vec<Pair>>> {
+        let addresses = format_addresses(token_addresses)?;
         let path = format!("tokens/v1/{chain_id}/{addresses}");
 
-        self.get_pair(&path).await
+        self.get_v1_pair(&path).await
     }
 
     // MI: latest/dex/search?q=text
@@ -168,20 +192,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_pools() {
+        let client = Client::new();
+        let token_address = "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN";
+        let result = client.pools("solana", token_address).await.unwrap().unwrap(); //.pairs.unwrap();
+        assert_eq!(&result[0].base_token.address.clone().unwrap(), token_address);
+        assert!(result.len() > 0);
+    }
+
+    #[tokio::test]
     async fn test_tokens() {
         let client = Client::new();
         let token_addresses = [
-            "0x2170Ed0880ac9A755fd29B2688956BD959F933F8",
-            "0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c",
+            "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+            "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
         ];
-        let result = client.tokens("bsc", token_addresses).await.unwrap().pairs.unwrap();
+        let result = client.tokens(token_addresses).await.unwrap().pairs.unwrap();
+
+        assert_eq!(&result[0].base_token.address.clone().unwrap(), token_addresses[0]);
         assert!(result.len() > 20);
+    }
+
+    #[tokio::test]
+    async fn test_v1_tokens() {
+        let client = Client::new();
+        let token_addresses = [
+            "6p6xgHyF7AeE6TZkSmFsko444wqoP15icUSqi2jfGiPN",
+            "FUAfBo2jgks6gB4Z4LfZkqSZgzNucisEHqnNebaRxM1P",
+        ];
+        let result = client.v1_tokens("solana", token_addresses).await.unwrap().unwrap(); //.pairs.unwrap();
+                                                                                          // println!("{:#?}", result);
+        assert_eq!(&result[0].base_token.address.clone().unwrap(), token_addresses[0]);
+        assert!(result.len() > 0);
     }
 
     #[tokio::test]
     async fn test_search() {
         let client = Client::new();
-        let result = client.search("WBNB USDC").await.unwrap().pairs.unwrap();
-        assert!(result.len() > 20);
+        let result = client.search("WSOL USDC").await.unwrap().pairs.unwrap();
+        // println!("{:#?}", result);
+        assert!(result.len() >= 1);
     }
 }
